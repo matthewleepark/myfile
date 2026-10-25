@@ -1,0 +1,78 @@
+[package]
+name = "myfile"
+version = "0.1.0"
+description = "One shortcut for every file"
+authors = ["Matthew Lee Park"]
+edition = "2024"
+# The desktop app; `myfile-mcp` (src/bin) is the MCP server.
+default-run = "myfile"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[lib]
+# The `_lib` suffix may seem redundant but it is necessary
+# to make the lib name unique and wouldn't conflict with the bin name.
+# This seems to be only an issue on Windows, see https://github.com/rust-lang/cargo/issues/8519
+name = "myfile_lib"
+crate-type = ["staticlib", "cdylib", "rlib"]
+
+[build-dependencies]
+tauri-build = { version = "2", features = [] }
+
+[dependencies]
+tauri = { version = "2", features = [] }
+serde = { version = "1", features = ["derive"] }
+serde_json = { version = "1", features = ["preserve_order"] }
+tauri-plugin-dialog = "2"
+infer = "0.22.0"
+image = { version = "0.25", default-features = false, features = ["png", "jpeg", "gif", "bmp", "webp", "tiff", "ico", "tga", "pnm", "qoi"] }
+pdf-extract = "0.12.1"
+base64 = "0.23.1"
+tokio = { version = "1.54.0", features = ["process", "io-util", "time", "sync", "macros", "rt"] }
+# Ollama (plain HTTP on localhost) and the one-time speech model download (HTTPS).
+ureq = { version = "2", default-features = false, features = ["json", "tls"] }
+notify = "8.2.0"
+tauri-plugin-notification = "2"
+tempfile = "3.27.0"
+similar = "3.2.0"
+whisper-rs = "0.16"
+# Not for debugging: on Windows release builds, whisper-rs-sys names the CMake
+# build type "Release", and the cmake crate then replaces the Release compiler
+# flags without any /O option, so whisper.cpp was compiled unoptimized (7x
+# slower). With this feature it names "RelWithDebInfo" instead and the Release
+# configuration keeps /O2. (Its only other effect is debug-level log messages,
+# which MyFile routes to a silent logger.)
+whisper-rs-sys = { version = "0.15", features = ["force-debug"] }
+sha2 = "0.10"
+symphonia = { version = "0.5", features = ["aac", "isomp4", "mp3", "alac"] }
+rusqlite = { version = "0.40", features = ["bundled"] }
+hayro = "0.8"
+calamine = "0.37"
+rust_xlsxwriter = { version = "0.101", default-features = false }
+pulldown-cmark = { version = "0.13", default-features = false, features = ["html"] }
+serde_yaml_ng = "0.10"
+toml = "1"
+csv = "1"
+zip = { version = "9", default-features = false, features = ["deflate"] }
+flate2 = "1"
+tar = "0.4"
+roxmltree = "0.21"
+
+
+# Read the optimization guideline for more details: https://tauri.app/concept/size/#cargo-configuration
+[profile.release]
+codegen-units = 1
+lto = true
+opt-level = 3
+strip = true
+
+# Speech recognition and audio decoding are unusably slow unoptimized, so
+# optimize them even in dev builds.
+[profile.dev.package.whisper-rs-sys]
+opt-level = 3
+
+[profile.dev.package."symphonia-codec-aac"]
+opt-level = 3
+
+[profile.dev.package."symphonia-bundle-mp3"]
+opt-level = 3

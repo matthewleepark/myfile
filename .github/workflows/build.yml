@@ -1,0 +1,89 @@
+# Builds and tests MyFile on macOS and Windows.
+# The macOS job produces an unsigned universal .app/.dmg (Apple Silicon + Intel);
+# download it from the run's "Artifacts" section. Unsigned apps show a
+# Gatekeeper warning: right-click the app and choose Open the first time.
+name: Build
+
+on:
+  push:
+    branches: [main, master]
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  build:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: macos-latest
+            # Apple Silicon uses NEON either way; the Intel half gets no AVX
+            # flags, so it runs on any Intel Mac.
+            ggml_x86: "OFF"
+            rust_targets: aarch64-apple-darwin,x86_64-apple-darwin
+            build_args: --target universal-apple-darwin
+            bundle_dir: src-tauri/target/universal-apple-darwin/release/bundle
+            artifact: MyFile-macos-universal
+          - os: windows-latest
+            ggml_x86: "ON"
+            rust_targets: ""
+            build_args: ""
+            bundle_dir: src-tauri/target/release/bundle
+            artifact: MyFile-windows
+    runs-on: ${{ matrix.os }}
+    env:
+      # whisper.cpp (speech to text) is compiled by CMake. Never tune it for
+      # the CI machine's own CPU: the app has to run on users' computers.
+      # AVX2/FMA/F16C are on every x86 CPU since 2013.
+      GGML_NATIVE: "OFF"
+      GGML_AVX2: ${{ matrix.ggml_x86 }}
+      GGML_FMA: ${{ matrix.ggml_x86 }}
+      GGML_F16C: ${{ matrix.ggml_x86 }}
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.rust_targets }}
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: src-tauri
+
+      # bindgen needs libclang to generate the whisper.cpp bindings. The
+      # Windows image ships LLVM; macOS uses the Xcode toolchain.
+      - name: Point bindgen at LLVM (Windows)
+        if: runner.os == 'Windows'
+        shell: bash
+        run: echo 'LIBCLANG_PATH=C:\Program Files\LLVM\bin' >> "$GITHUB_ENV"
+
+      - name: Install frontend dependencies
+        run: npm ci
+
+      - name: Type-check and build the frontend
+        run: npm run build
+
+      # Unit tests only. The live AI tests are #[ignore]d because they need a
+      # signed-in Claude Code CLI, which CI doesn't have.
+      - name: Backend unit tests
+        working-directory: src-tauri
+        run: cargo test
+
+      - name: Build the app
+        run: npm run tauri build -- ${{ matrix.build_args }}
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.artifact }}
+          path: |
+            ${{ matrix.bundle_dir }}/dmg/*.dmg
+            ${{ matrix.bundle_dir }}/macos/*.app
+            ${{ matrix.bundle_dir }}/nsis/*.exe
+            ${{ matrix.bundle_dir }}/msi/*.msi
+          if-no-files-found: error
