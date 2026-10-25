@@ -33,10 +33,15 @@ Tool: Claude Code in VS Code (mostly Opus 5.5, sometimes Haiku)
 
 - Claude built the Windows installers and checked the project against the assignment requirements.
 - I had it shorten this log so it matches my other logs.
+- I pushed everything to GitHub. The Mac build failed at first because the speech-to-text part needs a newer macOS, so Claude set the minimum to macOS 10.15. Then it failed again while packaging, so it split the Mac build into separate Apple Silicon and Intel apps. Now Windows and both Mac builds pass.
+- I felt like the project looked like no effort went into it, even though a lot was built. So I had Claude make it look better: a browser version of the converter on my portfolio (it converts many files at once and has a before/after slider), a new project page with real screenshots, and a new demo video of the converter.
+- Testing the browser version caught that PDF and MP3 conversions stalled when the tab wasn't visible, so Claude fixed that.
+- I published a release on GitHub so people can download the app for Windows or Mac.
 
 ## Issues
 
 - Asking for "everything" made the app way too big and messy, so I had to step back and focus on converting files. Next time I'd decide the main purpose first.
 - Testing caught some real bugs that Claude fixed: the AI put a date in the wrong year (2022 instead of 2026), the installed app ran 7x slower because of a build setting, and JSON to YAML mixed up the order of things.
 - Some tools aren't installed on my computer, so those parts aren't tested yet. OCR needs Tesseract (the install got cancelled), and Word/Excel/PowerPoint to PDF needs LibreOffice.
-- The Mac version only builds after I push the code to GitHub, so I haven't seen it work yet.
+- I don't have a Mac, so the Mac version builds and passes its tests on GitHub, but I haven't run it on a real Mac.
+- The browser version can't do everything the desktop app can. The AI "describe it" box and video conversion need the desktop app.

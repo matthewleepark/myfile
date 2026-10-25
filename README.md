@@ -4,6 +4,8 @@
 
 Built with Tauri 2 (Rust backend) and React + TypeScript (frontend) for TCSS 490, Artifact 3.
 
+**Try it:** the [browser version](https://matthewleepark.github.io/myfile/app/) (the common conversions, many files at once, nothing uploaded) · [download the desktop app](https://github.com/matthewleepark/myfile/releases/latest) · [project page](https://matthewleepark.github.io/myfile/)
+
 ## What it converts
 
 | From | To | Engine |
@@ -47,7 +49,7 @@ The format is detected from the file's **contents**, not just its name, so a PNG
 | **Folder watch** | Watches a folder like Downloads and reads new syllabi automatically, with a Windows notification | Find deadlines in the new document | Ignores in-progress downloads, links, and its own output; standing permission is explicit, visible, and stops with Stop |
 | **MCP server** | `myfile-mcp` lets Claude Code itself call MyFile: read documents, **verify quotes**, compress images, export calendars | (Claude Code is the caller) | Every path stays inside a root folder; writes only ever create new files |
 
-**Demo video (83 s):** [`demo/myfile-demo.mp4`](demo/myfile-demo.mp4). It was recorded from the real release build by [`demo/record.mjs`](demo/record.mjs), with captions that read the actual on-screen results and AI waits shown at 4×.
+**Demo video (82 s):** [`demo/myfile-demo.mp4`](demo/myfile-demo.mp4). It converts a photo (with the AI picking the conversion), a PDF, a video and a CSV. It was recorded from the running app by [`demo/record.mjs`](demo/record.mjs), with captions that read the actual on-screen results and AI waits shown at 4×.
 
 See [LOG.md](LOG.md) for the running log of plans and changes.
 
@@ -234,10 +236,10 @@ Sample files for trying every feature are in [`test-files/`](test-files/): `scan
 
 | | Windows 11 | macOS |
 |---|---|---|
-| Builds, runs, all features | ✅ Verified (see LOG.md for how) | ❌ Not verified. Needs a Mac. |
+| Builds, runs, all features | ✅ Verified (see LOG.md for how) | ✅ Builds in CI as .dmg files for Apple Silicon and Intel, and all unit tests pass on GitHub's Mac runner. ❌ Not yet run on a real Mac. |
 | OCR | Image extraction from scanned PDFs verified by a unit test. The Tesseract step is **not verified yet**, because Tesseract isn't installed on the test machine | Code looks in the Homebrew paths, untested |
 | Shift detection | ✅ Verified with a real Shift key press | Code written (`CGEventSourceFlagsState`), untested |
-| CI build and unit tests | [`.github/workflows/build.yml`](.github/workflows/build.yml) | Same workflow builds an unsigned universal `.app`/`.dmg` on GitHub's Mac runners. It runs once the repo is pushed to GitHub, and has not run yet. |
+| CI build and unit tests | ✅ [`.github/workflows/build.yml`](.github/workflows/build.yml) builds the .exe and .msi installers and runs the tests | ✅ Same workflow builds unsigned `.app`/`.dmg` for Apple Silicon and Intel (macOS 10.15 or newer) and runs the tests |
 
 All paths go through Rust's `std::path`, dialogs and drag-and-drop come from Tauri, and the only platform-specific code is the small, isolated `shift.rs`. A Mac is still needed to *prove* macOS works.
 
