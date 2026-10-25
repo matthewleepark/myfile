@@ -8,7 +8,7 @@ Tauri 2 desktop app (Windows + macOS): a file converter first. Drop a file, see 
 
 ## Rules
 
-- **Log every change.** Append an entry to `LOG.md` (date, plan, what changed, what was verified) for each meaningful piece of work. It's a course requirement.
+- **Log every change.** `LOG.md` is a short first-person build log (what I asked, "Changes I made", "Issues"), like the other artifacts' logs. Add a bullet for each meaningful change. It's a course requirement.
 - **Never advertise unimplemented actions.** An action appears in `actions.rs` only once it works end to end.
 - **File access goes through Rust commands that act on the current selected file** (`AppState`). Don't add `tauri-plugin-fs` or broaden capabilities without a specific need.
 - **Never modify the user's original file.** Outputs are new files saved where the user chooses, with confirmation before overwriting.
