@@ -1,5 +1,5 @@
 # Builds and tests MyFile on macOS and Windows.
-# The macOS job produces an unsigned universal .app/.dmg (Apple Silicon + Intel);
+# The macOS jobs produce unsigned .app/.dmg builds for Apple Silicon and Intel;
 # download it from the run's "Artifacts" section. Unsigned apps show a
 # Gatekeeper warning: right-click the app and choose Open the first time.
 name: Build
@@ -16,14 +16,21 @@ jobs:
       fail-fast: false
       matrix:
         include:
+          # One app per Mac architecture. (A universal build merges only the
+          # main binary, so bundling the myfile-mcp binary fails.)
           - os: macos-latest
-            # Apple Silicon uses NEON either way; the Intel half gets no AVX
-            # flags, so it runs on any Intel Mac.
             ggml_x86: "OFF"
-            rust_targets: aarch64-apple-darwin,x86_64-apple-darwin
-            build_args: --target universal-apple-darwin
-            bundle_dir: src-tauri/target/universal-apple-darwin/release/bundle
-            artifact: MyFile-macos-universal
+            rust_targets: aarch64-apple-darwin
+            build_args: --target aarch64-apple-darwin
+            bundle_dir: src-tauri/target/aarch64-apple-darwin/release/bundle
+            artifact: MyFile-macos-apple-silicon
+          - os: macos-latest
+            # Built on Apple Silicon for Intel: no AVX flags, so it runs on any Intel Mac.
+            ggml_x86: "OFF"
+            rust_targets: x86_64-apple-darwin
+            build_args: --target x86_64-apple-darwin
+            bundle_dir: src-tauri/target/x86_64-apple-darwin/release/bundle
+            artifact: MyFile-macos-intel
           - os: windows-latest
             ggml_x86: "ON"
             rust_targets: ""

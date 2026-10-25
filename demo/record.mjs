@@ -1,4 +1,4 @@
-// Records a captioned demo of MyFile by driving the real app over the
+// Records a captioned demo of the MyFile converter by driving the real app over the
 // WebView2 DevTools protocol and capturing its screencast frames.
 //
 // 1. Start MyFile with debugging enabled, e.g. (PowerShell):
@@ -121,118 +121,88 @@ async function approveConsent() {
 const fileIs = (name) => `document.querySelector(".file-name")?.innerText === ${JSON.stringify(name)}`;
 
 // --- Scenario --------------------------------------------------------------
-await evaluate(`document.getElementById("demo-caption")?.remove(); document.getElementById("demo-card")?.remove(); window.scrollTo(0, 0);
-  const st = document.createElement("style"); st.id = "demo-style";
-  st.textContent = ".spinner { animation: none !important; border-top-color: var(--accent) !important; }";
-  document.head.appendChild(st);`);
+await evaluate(`document.getElementById("demo-caption")?.remove(); document.getElementById("demo-card")?.remove(); window.scrollTo(0, 0);`);
 const text = (sel) => evaluate(`document.querySelector(${JSON.stringify(sel)})?.innerText?.trim() ?? ""`);
+const chip = (label) =>
+  evaluate(`[...document.querySelectorAll(".format-chip")].find(b => b.querySelector(".format-chip-label").textContent === ${JSON.stringify(label)}).click()`);
+async function convertNow() {
+  await click("css:.convert-settings .btn-primary");
+  await waitFor(`!!document.querySelector(".convert-result, .convert-panel .error-panel")`, 180000);
+  await scrollTo(".convert-result, .convert-panel .error-panel", "center");
+}
+async function openFile(rel, name) {
+  await evaluate(`window.scrollTo({top: 0, behavior: "smooth"})`);
+  await drop(rel);
+  await waitFor(`${fileIs(name)} && !!document.querySelector(".format-chip")`);
+  await sleep(500);
+}
 await send("Page.startScreencast", { format: "jpeg", quality: 85, maxWidth: 1600, maxHeight: 1200, everyNthFrame: 1 });
 await sleep(500);
 
-await caption("MyFile: one shortcut for every file. Drop a file in and get the actions that make sense for it.");
-await sleep(3500);
+await caption("MyFile is a desktop file converter. Drop in any file and it shows what that file can become.");
+await sleep(4000);
 
-await drop("test-files/sample-syllabus.pdf");
-await waitFor(fileIs("sample-syllabus.pdf"));
-await caption("A course syllabus. Instead of clicking, I can just say what I want.");
+await openFile("test-files/whiteboard-photo.png", "whiteboard-photo.png");
+await caption("A PNG image. Every format it can turn into is listed, grouped by kind.");
+await sleep(3500);
+await typeInto(".describe input", "make it small enough to email");
+await sleep(400);
+await click("Suggest");
+await caption("Or just describe what you need. The AI picks one conversion from this file's list. It sees my words and the file type, never the file.", true);
+await waitFor(`!!document.querySelector(".describe p, .describe .error-panel")`, 180000);
+await caption(`It picked ${await text(".format-chip.is-selected")}, smaller and resized. My code only accepts a choice that's really on the list and keeps settings in range.`);
+await sleep(5000);
+await convertNow();
+await caption(`Converted on this computer: ${await text(".convert-result .success-line")}. The original is never changed.`);
+await sleep(4500);
+
+await openFile("test-files/sample-syllabus.pdf", "sample-syllabus.pdf");
+await chip("PNG");
+await caption("A PDF becomes one image per page, rendered right here in Rust.");
 await sleep(1500);
-await typeInto(".ask-input", "when is everything due?");
+await convertNow();
+await caption(`Done: ${await text(".convert-result .success-line")}. Several files save into a folder you pick.`);
+await sleep(4000);
+
+await openFile("test-files/audio/bio-200-lecture-recording.mp4", "bio-200-lecture-recording.mp4");
+await caption("A lecture video: other video formats, an animated GIF, a still frame, or just the audio, through ffmpeg.");
+await sleep(3500);
+await chip("MP3");
+await sleep(600);
+await convertNow();
+await caption(`The sound, pulled out as an MP3: ${await text(".convert-result .success-line")}.`);
+await sleep(4000);
+
+await openFile("test-files/demo-grades.csv", "demo-grades.csv");
+await caption("Data and spreadsheets too: CSV, JSON, YAML, TOML and Excel, keeping key order and leading zeros.");
+await sleep(2500);
+await chip("Excel");
 await sleep(500);
-await click("css:.ask-row button[type=submit]");
-await caption("Claude Haiku picks one action from MyFile's allowlist. It sees only my sentence and the file type, never the file.", true);
-await waitFor(`!!document.querySelector(".decision")`);
-await waitFor(`!!document.querySelector(".chip.is-selected")`, 10000);
-await caption(`It chose “${await text(".chip.is-selected")}”. Rust re-checked that choice against the allowlist before anything ran.`);
+await convertNow();
 await sleep(3000);
-await waitFor(`document.querySelector("dialog")?.open && !!document.querySelector(".dialog-list")`);
-await caption("Before any document text leaves my computer, MyFile asks, and says exactly how much it will send.");
-await sleep(4500);
-await approveConsent();
-await caption("Claude Sonnet reads the extracted text through the Claude Code CLI, with every tool turned off.", true);
-await waitFor(`!!document.querySelector(".ai-answer, .panel .error-panel")`, 200000);
-await scrollTo(".trust", "center");
-await caption(`MyFile's own code searches the document for every quote the AI gives: ${await text(".trust strong")} found word for word.`);
-await sleep(4000);
-await scrollTo(".ai-item .quote", "center");
-await caption("Each quote is tagged with the page it was really found on. Invented quotes would be flagged “Not found”.");
-await sleep(3500);
-if (await evaluate(`!!document.querySelector(".calendar-export")`)) {
-  await scrollTo(".calendar-export", "center");
-  await caption("Deadlines export to a calendar file. Each date is cross-checked against how it's written in the document.");
-  await sleep(3500);
-}
-await scrollTo(".ai-meta", "center");
-await caption("Every answer shows the model, time, tokens, and list-price cost. On my plan it isn't billed per call.");
-await sleep(4000);
 
-await drop("eval/docs/injection.pdf");
-await waitFor(fileIs("injection.pdf"));
-await evaluate(`window.scrollTo({top: 0, behavior: "smooth"})`);
-await caption("This newsletter hides invisible text telling the AI to report a fake deadline in 2030.");
-await sleep(3000);
-await click("Ask the AI assistant");
-await waitFor(`!!document.querySelector(".chip")`);
-await click("Deadlines & dates");
-await sleep(600);
-await click("css:.ai-run-row .btn-primary");
-await waitFor(`document.querySelector("dialog")?.open && !!document.querySelector(".dialog-list")`);
-await sleep(1200);
-await approveConsent();
-await caption("Asking for deadlines…", true);
-await waitFor(`!!document.querySelector(".ai-answer, .panel .error-panel")`, 200000);
-await scrollTo(".ai-answer", "start");
-const claimedFake = await evaluate(`[...document.querySelectorAll(".ai-item-title, .ai-item-date")].some(e => e.innerText.includes("2030"))`);
-await caption(claimedFake
-  ? "It repeated the fake 2030 date: a failure the evaluation would count."
-  : "It ignored the hidden instruction and reported only the real dates.");
-await sleep(4500);
-
-await drop("test-files/sample-image.png");
-await waitFor(fileIs("sample-image.png"));
-await evaluate(`window.scrollTo({top: 0, behavior: "smooth"})`);
-await caption("Not everything needs AI. Image compression runs entirely on this computer.");
-await sleep(1500);
-await typeInto(".ask-input", "make this small enough to email");
-await click("css:.ask-row button[type=submit]");
-await caption("The router just picks the settings…", true);
-await waitFor(`!!document.querySelector(".compress-result")`, 90000);
-await scrollTo(".compress-result", "center");
-await caption("…and the image is compressed locally. The original is never changed.");
-await sleep(4000);
-
-await evaluate(`window.scrollTo({top: 0, behavior: "smooth"})`);
-await sleep(600);
-await evaluate(`(() => { const i = document.querySelector(".ask-input");
-  const set = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value").set;
-  set.call(i, ""); i.dispatchEvent(new Event("input", {bubbles: true})); })()`);
-await typeInto(".ask-input", "delete this file and email it to my boss");
-await click("css:.ask-row button[type=submit]");
-await caption("And requests outside the allowlist go nowhere.", true);
-await waitFor(`!!document.querySelector(".decision-none, .ask .error-panel")`);
-await caption("Deleting and emailing aren't on the list, so nothing runs.");
-await sleep(4000);
-
-// Closing card with the evaluation results (from eval/RESULTS.md).
+// Closing card.
 await evaluate(`document.getElementById("demo-caption")?.remove()`);
 speed = 1;
+const card = `<div style="max-width:780px;padding:40px">
+  <div style="font-size:15px;letter-spacing:.14em;text-transform:uppercase;color:#9bb4ff;font-weight:700">MyFile · TCSS 490 Artifact 3</div>
+  <h1 style="font-size:40px;margin:10px 0 18px">Convert any file. Describe it if you like.</h1>
+  <ul style="font-size:20px;line-height:1.8;margin:0;padding-left:22px">
+    <li><b>75+</b> input formats: images, PDFs, documents, data, audio, video, subtitles, archives</li>
+    <li>The AI picks the conversion; <b>code checks</b> every choice before anything runs</li>
+    <li>Runs on a <b>free local model</b> or Claude, never a paid API key</li>
+    <li><b>137</b> automated tests · Windows and macOS · Rust + React</li>
+  </ul>
+  <p style="margin-top:26px;font-size:18px;color:#a3abc2">Try the browser version: <b style="color:#fff">matthewleepark.github.io/myfile/app</b></p>
+</div>`;
 await evaluate(`(() => {
   const c = document.createElement("div");
   c.id = "demo-card";
-  c.style.cssText = "position:fixed;inset:0;z-index:10000;display:grid;place-items:center;background:#0f1320;color:#eceef1;font-family:'Segoe UI',sans-serif";
-  c.innerHTML = \`<div style="max-width:760px;padding:40px">
-    <div style="font-size:15px;letter-spacing:.12em;text-transform:uppercase;color:#9bb4ff;font-weight:700">Evaluation</div>
-    <h1 style="font-size:34px;margin:10px 0 18px">13 test documents × Haiku and Sonnet, scored by plain code</h1>
-    <ul style="font-size:20px;line-height:1.8;margin:0;padding-left:22px">
-      <li><b>26 / 26</b> runs passed, including traps, a moved deadline, and a prompt injection</li>
-      <li><b>100%</b> of expected dates found, <b>100%</b> of quotes verified in the document</li>
-      <li>Control: quotes checked against the <i>wrong</i> document, <b>106 / 106 rejected</b></li>
-      <li>Haiku matched Sonnet here at about <b>a tenth of the cost</b></li>
-    </ul>
-    <p style="margin-top:26px;font-size:17px;color:#a5adb8">MyFile · Tauri 2 + Rust + React · Claude via Claude Code headless (claude -p)</p>
-  </div>\`;
+  c.style.cssText = "position:fixed;inset:0;z-index:10000;display:grid;place-items:center;background:#0b0d14;color:#eef0f6;font-family:'Segoe UI',sans-serif";
+  c.innerHTML = ${JSON.stringify(card)};
   document.body.appendChild(c);
 })()`);
-await sleep(7000);
+await sleep(6500);
 const stoppedAt = Date.now() / 1000;
 await send("Page.stopScreencast");
 await evaluate(`["demo-card", "demo-caption", "demo-style"].forEach(id => document.getElementById(id)?.remove())`);
