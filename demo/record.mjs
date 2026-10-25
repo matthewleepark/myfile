@@ -188,7 +188,7 @@ const card = `<div style="max-width:780px;padding:40px">
   <div style="font-size:15px;letter-spacing:.14em;text-transform:uppercase;color:#9bb4ff;font-weight:700">MyFile · TCSS 490 Artifact 3</div>
   <h1 style="font-size:40px;margin:10px 0 18px">Convert any file. Describe it if you like.</h1>
   <ul style="font-size:20px;line-height:1.8;margin:0;padding-left:22px">
-    <li><b>75+</b> input formats: images, PDFs, documents, data, audio, video, subtitles, archives</li>
+    <li><b>74</b> formats (110 file extensions): images, PDFs, documents, data, audio, video, subtitles, archives</li>
     <li>The AI picks the conversion; <b>code checks</b> every choice before anything runs</li>
     <li>Runs on a <b>free local model</b> or Claude, never a paid API key</li>
     <li><b>137</b> automated tests · Windows and macOS · Rust + React</li>
