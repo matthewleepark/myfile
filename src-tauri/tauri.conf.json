@@ -35,9 +35,12 @@
       "icons/icon.icns",
       "icons/icon.ico"
     ],
-    "shortDescription": "One shortcut for every file",
-    "longDescription": "Drop in a file to compress images, extract PDF text, or ask an AI assistant about a document.",
+    "shortDescription": "Convert any file",
+    "longDescription": "Drop in a file to convert it: images, PDFs, documents, spreadsheets and data files, audio, video, subtitles, and archives.",
     "category": "Utility",
-    "copyright": "© 2026 Matthew Lee Park"
+    "copyright": "© 2026 Matthew Lee Park",
+    "macOS": {
+      "minimumSystemVersion": "10.15"
+    }
   }
 }

@@ -32,6 +32,8 @@ jobs:
             artifact: MyFile-windows
     runs-on: ${{ matrix.os }}
     env:
+      # whisper.cpp uses std::filesystem, available from macOS 10.15.
+      MACOSX_DEPLOYMENT_TARGET: "10.15"
       # whisper.cpp (speech to text) is compiled by CMake. Never tune it for
       # the CI machine's own CPU: the app has to run on users' computers.
       # AVX2/FMA/F16C are on every x86 CPU since 2013.
