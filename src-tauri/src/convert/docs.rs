@@ -639,19 +639,21 @@ pub fn epub_chapters(path: &Path) -> Result<Vec<String>, AppError> {
     Ok(chapters)
 }
 
-fn document_blocks(job: &Job) -> Result<Vec<Block>, AppError> {
+/// The text of a document MyFile reads itself (Markdown, text, HTML, Word,
+/// OpenDocument, PowerPoint, EPUB) as blocks.
+pub fn file_blocks(path: &Path, format: &str) -> Result<Vec<Block>, AppError> {
     let read_text = || -> Result<String, AppError> {
-        let bytes = std::fs::read(job.input).map_err(AppError::from_read)?;
+        let bytes = std::fs::read(path).map_err(AppError::from_read)?;
         Ok(String::from_utf8_lossy(&bytes).trim_start_matches('\u{feff}').to_string())
     };
-    Ok(match job.format {
+    Ok(match format {
         "md" => markdown_blocks(&read_text()?),
         "txt" => text_blocks(&read_text()?),
         "html" => html_blocks(&read_text()?),
-        "docx" => docx_blocks(&zip_entry(job.input, "word/document.xml")?.ok_or_else(|| fail("this Word file has no document part"))?)?,
-        "odt" | "odp" => odf_blocks(&zip_entry(job.input, "content.xml")?.ok_or_else(|| fail("this file has no content part"))?)?,
-        "pptx" => pptx_blocks(job.input)?,
-        "epub" => epub_chapters(job.input)?.iter().flat_map(|c| html_blocks(c)).collect(),
+        "docx" => docx_blocks(&zip_entry(path, "word/document.xml")?.ok_or_else(|| fail("this Word file has no document part"))?)?,
+        "odt" | "odp" => odf_blocks(&zip_entry(path, "content.xml")?.ok_or_else(|| fail("this file has no content part"))?)?,
+        "pptx" => pptx_blocks(path)?,
+        "epub" => epub_chapters(path)?.iter().flat_map(|c| html_blocks(c)).collect(),
         f => return Err(AppError::new("bad_target", format!("MyFile can't read {} files by itself.", f.to_uppercase()))),
     })
 }
@@ -667,7 +669,7 @@ pub fn convert(job: &Job) -> Result<Vec<PathBuf>, AppError> {
         std::fs::write(&out, html_page(job.stem, &body)).map_err(fail)?;
         return Ok(vec![out]);
     }
-    let blocks = document_blocks(job)?;
+    let blocks = file_blocks(job.input, job.format)?;
     job.check_cancel()?;
     if blocks.is_empty() {
         return Err(AppError::new("convert_failed", "No text was found in this file."));

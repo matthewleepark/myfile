@@ -429,7 +429,7 @@ fn decode_ffmpeg(ffmpeg: &Path, path: &Path, cancel: &AtomicBool, sink: &mut dyn
 // The speech model
 // ---------------------------------------------------------------------------
 
-fn model_path(app: &AppHandle) -> Result<PathBuf, AppError> {
+pub(crate) fn model_path(app: &AppHandle) -> Result<PathBuf, AppError> {
     if let Ok(p) = std::env::var("MYFILE_WHISPER_MODEL") {
         return Ok(PathBuf::from(p));
     }

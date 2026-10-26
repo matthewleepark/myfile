@@ -20,7 +20,7 @@ Tauri 2 desktop app (Windows + macOS): a file converter first. Drop a file, see 
 
 ## Modules
 
-- `convert/`: the converter. `mod.rs` holds formats, detection, routes, commands and the checked AI suggestion; `media.rs` handles images, ffmpeg audio/video and subtitles; `docs.rs` handles PDF rendering (hayro) and documents; `data.rs` handles data and spreadsheets; `archive.rs` handles archives; `office.rs` runs LibreOffice and pandoc; `pdfwrite.rs` writes PDFs. A conversion appears only when its engine is installed.
+- `convert/`: the converter. `mod.rs` holds formats, detection, routes, commands and the checked AI suggestion; `media.rs` handles images, ffmpeg audio/video and subtitles; `docs.rs` handles PDF rendering (hayro) and documents; `data.rs` handles data and spreadsheets; `archive.rs` handles archives; `office.rs` runs LibreOffice and pandoc; `pdfwrite.rs` writes PDFs. `report.rs` reads every file in a folder and saves it all as one Word/PDF/Markdown/HTML/text/JSON file or a CSV file list. A conversion appears only when its engine is installed.
 - `ai.rs`: prompts, the Claude CLI provider, and `validate`. Every model answer goes through `validate`: quote check, page fixes, date cross-check, date-in-own-quote check, and injection detection.
 - `local.rs`: the Ollama provider. It uses the same prompt, schema, and `validate` as Claude, and it is the default wherever it is available.
 - `route.rs`: typed request to one allowlisted action.

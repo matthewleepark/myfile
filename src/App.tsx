@@ -99,14 +99,14 @@ export default function App() {
     }
   }
 
-  /** Semester brain: every PDF and text file in a folder at once. */
+  /** Folder mode: every file in a folder at once. */
   async function openFolder(path: string, request = ++latestRequest.current) {
     routeToken.current++;
     setActive(null);
     setRouted(null);
     setThumbnail(null);
     setQuickMenu(null);
-    setFileState({ status: "validating", name: baseName(path) + " (reading every document locally)" });
+    setFileState({ status: "validating", name: baseName(path) });
     try {
       const folder = await folderApi.open(path);
       if (request === latestRequest.current) setFileState({ status: "folder", folder, key: request });
@@ -130,6 +130,14 @@ export default function App() {
     if (typeof picked === "string") {
       setNotice(null);
       selectPath(picked);
+    }
+  }
+
+  async function browseFolder() {
+    const picked = await open({ multiple: false, directory: true, title: "Choose a folder" });
+    if (typeof picked === "string") {
+      setNotice(null);
+      openFolder(picked);
     }
   }
 
@@ -179,7 +187,7 @@ export default function App() {
           </p>
         )}
 
-        {fileState.status === "idle" && <DropZone dragging={dragging} onBrowse={browse} />}
+        {fileState.status === "idle" && <DropZone dragging={dragging} onBrowse={browse} onBrowseFolder={browseFolder} />}
 
         {fileState.status === "folder" && (
           <FolderView key={fileState.key} folder={fileState.folder} onClose={remove} />
@@ -195,7 +203,7 @@ export default function App() {
         {fileState.status === "error" && (
           <>
             <ErrorPanel title={`MyFile couldn't open “${fileState.name}”`} error={fileState.error} />
-            <DropZone dragging={dragging} onBrowse={browse} />
+            <DropZone dragging={dragging} onBrowse={browse} onBrowseFolder={browseFolder} />
           </>
         )}
 

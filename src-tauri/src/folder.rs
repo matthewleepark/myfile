@@ -48,6 +48,7 @@ pub struct FolderImage {
 pub struct FolderSession {
     pub id: u64,
     pub name: String,
+    pub path: PathBuf,
     pub docs: Vec<Arc<FolderDoc>>,
     /// Images in the folder, for agent mode's compress step. Never sent to a model.
     pub images: Vec<FolderImage>,
@@ -87,6 +88,9 @@ pub struct FolderSummary {
     total_chars: usize,
     /// Files that were skipped (unsupported type, or over the limit).
     skipped: Vec<String>,
+    /// Every file in the folder and its subfolders (see convert::report).
+    file_count: usize,
+    total_bytes: u64,
 }
 
 #[derive(Serialize, Clone)]
@@ -164,12 +168,14 @@ pub async fn open_folder(path: String, app: AppHandle, state: State<'_, AppState
 
     let name = dir.file_name().map(|n| n.to_string_lossy().into_owned()).unwrap_or_else(|| path.clone());
     let scan_dir = dir.clone();
-    let (found, images, skipped) = crate::blocking(move || Ok(scan(&scan_dir))).await?;
-    if found.is_empty() && images.is_empty() {
-        return Err(AppError::new(
-            "empty_folder",
-            "There are no PDFs, text files, or images in that folder (or its immediate subfolders).",
-        ));
+    let ((found, images, skipped), (file_count, total_bytes)) = crate::blocking(move || {
+        let (all, over) = crate::convert::report::walk(&scan_dir);
+        let bytes = all.iter().filter_map(|(p, _)| std::fs::metadata(p).ok()).map(|m| m.len()).sum();
+        Ok((scan(&scan_dir), (all.len() + over, bytes)))
+    })
+    .await?;
+    if file_count == 0 {
+        return Err(AppError::new("empty_folder", "That folder has no files in it."));
     }
 
     let total = found.len();
@@ -205,14 +211,24 @@ pub async fn open_folder(path: String, app: AppHandle, state: State<'_, AppState
         .enumerate()
         .map(|(index, i)| ImageSummary { index, name: i.name.clone(), size_bytes: i.size_bytes })
         .collect();
-    *lock(&state.folder) = Some(FolderSession { id, name: name.clone(), docs, images, consent: false });
-    Ok(FolderSummary { selection_id: id, name, docs: summaries, images: image_summaries, total_chars, skipped })
+    *lock(&state.folder) = Some(FolderSession { id, name: name.clone(), path: dir, docs, images, consent: false });
+    Ok(FolderSummary { selection_id: id, name, docs: summaries, images: image_summaries, total_chars, skipped, file_count, total_bytes })
 }
 
 #[tauri::command]
 pub fn close_folder(state: State<AppState>) {
     *lock(&state.folder) = None;
+    *lock(&state.folder_report) = None;
     cancel_all(&state);
+}
+
+/// The open folder's name and path, while `selection_id` is still open.
+pub(crate) fn folder_path(state: &AppState, selection_id: u64) -> Result<(String, PathBuf), AppError> {
+    match lock(&state.folder).as_ref() {
+        Some(f) if f.id == selection_id => Ok((f.name.clone(), f.path.clone())),
+        Some(_) => Err(AppError::new("stale", "You opened something else, so that request was cancelled.")),
+        None => Err(AppError::new("no_folder", "Open a folder first.")),
+    }
 }
 
 fn require_folder(state: &AppState, selection_id: u64) -> Result<(String, Vec<Arc<FolderDoc>>, bool), AppError> {

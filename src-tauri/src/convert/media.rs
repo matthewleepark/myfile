@@ -22,7 +22,7 @@ fn fail(e: impl std::fmt::Display) -> AppError {
     AppError::new("convert_failed", format!("The conversion failed: {e}"))
 }
 
-fn no_window(cmd: &mut Command) {
+pub(super) fn no_window(cmd: &mut Command) {
     #[cfg(windows)]
     {
         use std::os::windows::process::CommandExt;

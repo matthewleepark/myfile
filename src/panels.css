@@ -1058,3 +1058,11 @@ textarea {
 @media (max-width: 640px) {
   .convert-result { flex-direction: column; }
 }
+
+/* Folder report: what was found in each file. */
+.report-row { grid-template-columns: minmax(0, 1fr); grid-template-areas: "name" "meta" "status"; row-gap: 2px; }
+.report-row > .muted { white-space: normal; }
+.report-files > summary { cursor: pointer; color: var(--text-2); font-size: 14px; padding: 4px 0; }
+.report-files[open] > summary { margin-bottom: 8px; }
+.report-files .doc-list { max-height: 360px; overflow-y: auto; }
+.progress-head > span:nth-child(2) { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }

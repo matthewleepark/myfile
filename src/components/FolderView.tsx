@@ -14,13 +14,15 @@ import {
   type FolderSummary,
   type TimelineEntry,
 } from "../api";
-import { AlertIcon, CalendarIcon, CheckIcon, CloseIcon, LockIcon, SparkIcon } from "../icons";
+import { AlertIcon, CalendarIcon, CheckIcon, CloseIcon, FolderIcon, LockIcon, SparkIcon } from "../icons";
+import { formatSize } from "../format";
 import { ErrorPanel, Spinner } from "./common";
 import { AgentPanel } from "./AgentPanel";
 import { FactCheckView } from "./FactCheckView";
 import { EvidenceButton } from "./EvidenceViewer";
 import { TemplatePanel } from "./TemplatePanel";
 import { DuplicatesPanel } from "./DuplicatesPanel";
+import { FolderReportPanel } from "./FolderReportPanel";
 
 interface Props {
   folder: FolderSummary;
@@ -112,14 +114,12 @@ export function FolderView({ folder, onClose }: Props) {
     <>
       <section className="file-card" aria-label="Open folder">
         <div className="file-badge kind-pdf">
-          <SparkIcon width={26} height={26} />
+          <FolderIcon width={26} height={26} />
         </div>
         <div className="file-meta">
           <h2 className="file-name">{folder.name}</h2>
           <p className="file-details">
-            Semester brain · {usable.length} document{usable.length === 1 ? "" : "s"}
-            {folder.images.length > 0 && ` · ${folder.images.length} image${folder.images.length === 1 ? "" : "s"}`} ·{" "}
-            {folder.totalChars.toLocaleString()} characters
+            Folder · {folder.fileCount} file{folder.fileCount === 1 ? "" : "s"} · {formatSize(folder.totalBytes)}
           </p>
         </div>
         <div className="file-buttons">
@@ -129,8 +129,13 @@ export function FolderView({ folder, onClose }: Props) {
         </div>
       </section>
 
+      <FolderReportPanel selectionId={folder.selectionId} />
+
+      <details className="more-tools">
+      <summary>More tools for this folder</summary>
       <section className="panel" aria-label="Documents">
-        <h3 className="section-title">Documents in this folder</h3>
+        <h3 className="section-title">Semester timeline from the PDFs and notes</h3>
+        {folder.docs.length === 0 && <p className="muted small">There are no PDFs or text files here to build a timeline from.</p>}
         <ul className="doc-list">
           {folder.docs.map((d) => {
             const r = perDoc?.find((p) => p.index === d.index);
@@ -258,6 +263,7 @@ export function FolderView({ folder, onClose }: Props) {
       </section>
       {run.status === "done" && <Timeline result={run.result} selectionId={folder.selectionId} />}
       {(provider === "local" || consented) && <AskAcross folder={folder} provider={provider} />}
+      </details>
     </>
   );
 }

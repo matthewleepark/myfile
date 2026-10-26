@@ -109,6 +109,8 @@ struct AppState {
     convert_cancel: Mutex<Option<Arc<std::sync::atomic::AtomicBool>>>,
     /// The latest conversion result, waiting to be saved.
     conversion: Mutex<Option<convert::Conversion>>,
+    /// Everything read from the open folder, by its selection id.
+    folder_report: Mutex<Option<(u64, Arc<convert::report::Report>)>>,
     /// Cancels the running transcription or speech-model download.
     speech_cancel: Mutex<Option<Arc<std::sync::atomic::AtomicBool>>>,
 }
@@ -935,6 +937,8 @@ pub fn run() {
             convert::cancel_convert,
             convert::save_conversion,
             convert::suggest_conversion,
+            convert::report::read_folder_report,
+            convert::report::export_folder_report,
             evidence::evidence_current,
             evidence::evidence_folder,
             evidence::evidence_indexed,

@@ -163,7 +163,7 @@ fn same_extension(given: &str, detected: &str) -> bool {
 
 /// True if the bytes look like UTF-8 text (no NUL bytes, valid encoding).
 /// A multi-byte character cut off at the end of the sample is tolerated.
-fn looks_like_text(head: &[u8]) -> bool {
+pub(crate) fn looks_like_text(head: &[u8]) -> bool {
     if head.contains(&0) {
         return false;
     }

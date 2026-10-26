@@ -220,6 +220,9 @@ export interface FolderSummary {
   images: { index: number; name: string; sizeBytes: number }[];
   totalChars: number;
   skipped: string[];
+  /** Every file in the folder and its subfolders. */
+  fileCount: number;
+  totalBytes: number;
 }
 
 export interface FolderProgress {
@@ -678,6 +681,40 @@ export interface Suggestion {
   adjusted: string[];
   model: string;
 }
+
+// ---- Folder report: everything in a folder, as one file ----
+
+export interface ReportFile {
+  path: string;
+  label: string;
+  sizeBytes: number;
+  details: string[];
+  words: number;
+  note: string | null;
+  recording: boolean;
+  transcribed: boolean;
+}
+
+export interface ReportSummary {
+  files: ReportFile[];
+  totalBytes: number;
+  totalWords: number;
+  read: number;
+  notes: string[];
+  elapsedMs: number;
+}
+
+export interface ReportProgress {
+  done: number;
+  total: number;
+  current: string | null;
+}
+
+export const reportApi = {
+  read: (selectionId: number, transcribe: boolean) => call<ReportSummary>("read_folder_report", { selectionId, transcribe }),
+  /** target: docx, pdf, md, html, txt, json, or csv (the file list). Save it with convertApi.save. */
+  export: (selectionId: number, target: string) => call<ConversionResult>("export_folder_report", { selectionId, target }),
+};
 
 export const convertApi = {
   choices: (selectionId: number) => call<ConversionChoices>("conversion_choices", { selectionId }),

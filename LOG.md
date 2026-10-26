@@ -38,6 +38,7 @@ Tool: Claude Code in VS Code (mostly Opus 5.5, sometimes Haiku)
 - Testing the browser version caught that PDF and MP3 conversions stalled when the tab wasn't visible, so Claude fixed that.
 - I published a release on GitHub so people can download the app for Windows or Mac.
 - I wanted a PDF to give me options like Word, not just images. So Claude added a built-in Word (.docx) writer: a PDF now converts to Word, HTML, text, Markdown, or images (one per page). It rebuilds the paragraphs, headings and bullet points from the PDF's text. Markdown, text and PowerPoint can now become Word files too, and Word files can become PDFs without LibreOffice. I opened the results in Microsoft Word to check them, in the app and in the browser version.
+- I asked for MyFile to open whole folders and pull all the information out of them. Now you can drop a folder or click "Choose a folder", and MyFile reads every file inside, even in subfolders: the text of PDFs, Word, PowerPoint, Markdown and code, the rows of spreadsheets, what's inside ZIP files, and the size or length of pictures and recordings. It can also transcribe the recordings. Then you save everything as one Word, PDF, Markdown, HTML, text or JSON file, or a CSV list of the files. Claude tested it on a folder with 16 different kinds of files and checked that the Word file opens in Microsoft Word. The browser version on my site can take folders too.
 
 ## Issues
 

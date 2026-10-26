@@ -88,6 +88,16 @@ fn walk(job: &Job, visit: &mut Visit) -> Result<(), AppError> {
     }
 }
 
+/// The names of the files inside a ZIP or TAR archive, without unpacking it.
+pub fn entries(job: &Job) -> Result<Vec<String>, AppError> {
+    let mut names = Vec::new();
+    walk(job, &mut |rel, _| {
+        names.push(rel.to_string_lossy().replace('\\', "/"));
+        Ok(())
+    })?;
+    Ok(names)
+}
+
 pub fn convert(job: &Job) -> Result<Vec<PathBuf>, AppError> {
     match (job.format, job.target) {
         ("gz", _) => {

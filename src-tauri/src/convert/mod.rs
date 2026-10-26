@@ -18,6 +18,7 @@ mod docx;
 mod media;
 mod office;
 mod pdfwrite;
+pub mod report;
 
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -703,7 +704,9 @@ pub async fn save_conversion(conversion_id: u64, app: AppHandle, state: State<'_
         let original = lock(&state.selected).as_ref().filter(|s| s.id == c.selection_id).map(|s| s.path.clone());
         (c.dir.path().to_path_buf(), c.files.clone(), original)
     };
-    let start_dir = original.as_ref().and_then(|p| p.parent().map(Path::to_path_buf));
+    // A folder report starts beside the folder.
+    let folder = lock(&state.folder).as_ref().map(|f| f.path.clone());
+    let start_dir = original.as_ref().or(folder.as_ref()).and_then(|p| p.parent().map(Path::to_path_buf));
     if files.len() == 1 {
         let rel = &files[0];
         let name = rel.file_name().map(|n| n.to_string_lossy().into_owned()).unwrap_or_default();
