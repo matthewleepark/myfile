@@ -54,7 +54,10 @@ fn every_route_names_a_known_family_and_unavailable_tools_are_marked() {
             assert_eq!(t.available, t.engine == Engine::Builtin, "{id} -> {}", t.id);
         }
     }
-    assert!(targets("docx", &none).iter().any(|t| t.id == "pdf" && !t.available));
+    // Old .doc files need LibreOffice; Word (.docx) to PDF is built in.
+    assert!(targets("doc", &none).iter().any(|t| t.id == "pdf" && !t.available));
+    assert!(targets("docx", &none).iter().any(|t| t.id == "pdf" && t.available));
+    assert!(targets("pdf", &none).iter().any(|t| t.id == "docx" && t.available));
     assert!(targets("png", &none).iter().any(|t| t.id == "pdf" && t.available));
 }
 
@@ -195,7 +198,8 @@ fn suggestions_are_checked_against_the_list() {
     // Not on the list, or not available: nothing is picked.
     let s = check_suggestion(&json!({"target":"exe","quality":null,"maxDimension":null,"bitrate":null,"reason":"x"}), &t);
     assert!(s.target.is_none() && s.adjusted[0].contains("isn't a conversion"));
-    let docx = targets("docx", &Tools::default());
+    let docx = targets("doc", &Tools::default());
     let s = check_suggestion(&json!({"target":"pdf","quality":null,"maxDimension":null,"bitrate":null,"reason":"x"}), &docx);
     assert!(s.target.is_none(), "PDF needs LibreOffice, which isn't there");
 }
+

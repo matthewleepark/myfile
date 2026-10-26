@@ -12,12 +12,12 @@ Built with Tauri 2 (Rust backend) and React + TypeScript (frontend) for TCSS 490
 |---|---|---|
 | **Images:** PNG, JPG, GIF, WebP, BMP, TIFF, ICO, TGA, PPM, QOI | Any of those, AVIF, or **PDF**, with quality and size settings | Built in (lossy WebP and AVIF through ffmpeg) |
 | **Images:** HEIC, AVIF, JPEG XL, PSD, EXR, JPEG 2000, PCX, DPX | The formats above | Decoded by ffmpeg |
-| **PDF** | **PNG or JPG, one image per page** (rendered on this computer), text, Markdown | Built in ([hayro](https://crates.io/crates/hayro)) |
-| **Word / ODT** (.docx, .odt) | Text, Markdown, and with LibreOffice: PDF, DOCX, ODT, RTF, HTML | Built in / LibreOffice |
+| **PDF** | **Word (.docx)** and HTML (paragraphs, headings and lists rebuilt from the text), **PNG or JPG, one image per page** (rendered on this computer), text, Markdown | Built in ([hayro](https://crates.io/crates/hayro)) |
+| **Word / ODT** (.docx, .odt) | PDF (text and headings), Word, HTML, text, Markdown; ODT and RTF with LibreOffice, EPUB with pandoc. Old .doc and .rtf files need LibreOffice | Built in / LibreOffice |
 | **Excel / ODS** (.xlsx, .xls, .xlsm, .xlsb, .ods) | CSV, TSV, JSON, HTML table, Markdown table (one file per sheet), XLSX | Built in |
-| **PowerPoint / ODP** | Text and Markdown (one section per slide), and with LibreOffice: PDF | Built in / LibreOffice |
-| **EPUB** | Text, Markdown, HTML, PDF | Built in |
-| **Markdown, text, HTML** | PDF, HTML, text, Markdown; Word, ODT, EPUB and more with pandoc | Built in / pandoc |
+| **PowerPoint / ODP** | PDF and Word (the slides' text, one section per slide), text, Markdown. Old .ppt files and PowerPoint/ODP to each other need LibreOffice | Built in / LibreOffice |
+| **EPUB** | Text, Markdown, HTML, PDF, Word | Built in |
+| **Markdown, text, HTML** | PDF, Word, HTML, text, Markdown; ODT, EPUB and more with LibreOffice or pandoc | Built in / LibreOffice / pandoc |
 | **Data:** JSON, YAML, TOML, CSV, TSV, XML | Each other, plus Excel, HTML/Markdown/PDF tables (key order kept) | Built in |
 | **Subtitles:** SRT, VTT, ASS | SRT, VTT, plain text | Built in / ffmpeg |
 | **Audio:** MP3, WAV, M4A, AAC, FLAC, OGG, Opus, WMA, AIFF, AMR | MP3, M4A, WAV, FLAC, OGG, Opus, AIFF, with bitrate | ffmpeg |
@@ -245,7 +245,7 @@ All paths go through Rust's `std::path`, dialogs and drag-and-drop come from Tau
 
 ## Known limitations
 
-- **Conversion:** Word, Excel and PowerPoint to PDF (and other layout-preserving office conversions) need LibreOffice; Markdown to Word/EPUB needs pandoc. Neither is installed on the test machine, so those routes are written but **not verified**. MyFile's own text-to-PDF uses the standard PDF fonts, which show Western European characters; others print as "?". Animated GIF/WebP inputs convert their first frame. Camera RAW, vector formats (SVG, AI, EPS), and 7z/RAR archives aren't converted yet.
+- **Conversion:** MyFile's own Word output keeps the text, headings and lists, not the layout; PDF to Word rebuilds paragraphs from the PDF's text, so columns, tables and images aren't kept, and a scanned PDF has no text to convert. Excel to PDF, old .doc/.ppt/.rtf files, and ODT/RTF output need LibreOffice; EPUB, LaTeX and reStructuredText output need pandoc. Neither is installed on the test machine, so those routes are written but **not verified**. MyFile's own text-to-PDF uses the standard PDF fonts, which show Western European characters; others print as "?". Animated GIF/WebP inputs convert their first frame. Camera RAW, vector formats (SVG, AI, EPS), and 7z/RAR archives aren't converted yet.
 
 - OCR needs Tesseract installed separately, and its English model only. PDFs whose page images use JPEG 2000 or JBIG2 are skipped with a message.
 - Speech to text is English only, and the base model mishears some words (on the samples, "office hours" once became "our"). On audio that repeats itself word for word, Whisper sometimes skipped or duplicated a sentence. In an 11-minute test made of 20 identical loops, it caught each sentence 17–20 times.

@@ -19,9 +19,103 @@ const MAX_PAGES: usize = 500;
 // PDF
 // ---------------------------------------------------------------------------
 
+/// Rebuilds paragraphs from one page of extracted PDF text. The extractor
+/// puts every printed line on its own (often with blank lines between), so a
+/// line that doesn't end a sentence continues into the next one. Short lines
+/// without end punctuation between sentences ("Grading", "Final Moonshot")
+/// are headings; lines starting with a bullet or "1." are list items.
+pub fn pdf_page_blocks(page: &str, first_page: bool) -> Vec<Block> {
+    let lines: Vec<&str> = page.lines().map(str::trim).filter(|l| !l.is_empty()).collect();
+    let ends_sentence = |l: &str| l.ends_with(['.', '!', '?', ':', ';']) || l.ends_with(".\"") || l.ends_with(".)");
+    let bullet = |l: &str| -> Option<String> {
+        let t = l.trim_start_matches(['\u{2022}', '\u{25AA}', '\u{25CF}', '-', '*', '\u{2013}']).trim_start();
+        if t.len() < l.len() && !t.is_empty() && l.chars().nth(1).is_some_and(|c| c == ' ' || c == '\u{00A0}') {
+            return Some(t.to_string());
+        }
+        let digits: String = l.chars().take_while(|c| c.is_ascii_digit()).collect();
+        if !digits.is_empty() && digits.len() <= 2 && l[digits.len()..].starts_with(['.', ')']) && l[digits.len() + 1..].starts_with(' ') {
+            return Some(l.to_string());
+        }
+        None
+    };
+    let headingish = |l: &str| {
+        let words = l.split_whitespace().count();
+        // A sentence break inside the line (". ") means prose, not a heading.
+        l.chars().count() <= 60 && words <= 8 && !l.contains(". ") && !l.ends_with(['.', ',', ';', '!', '?']) && l.chars().next().is_some_and(|c| c.is_uppercase() || c.is_ascii_digit())
+    };
+    let mut blocks: Vec<Block> = Vec::new();
+    let mut cur: Option<Block> = None;
+    let flush = |cur: &mut Option<Block>, blocks: &mut Vec<Block>| {
+        if let Some(b) = cur.take() {
+            blocks.push(b);
+        }
+    };
+    let mut prev_ended = true;
+    for (i, l) in lines.iter().enumerate() {
+        let next = lines.get(i + 1).copied();
+        if let Some(item) = bullet(l) {
+            flush(&mut cur, &mut blocks);
+            cur = Some(Block::Item(item));
+            prev_ended = ends_sentence(l);
+            continue;
+        }
+        let next_starts_new = next.is_none_or(|n| n.chars().next().is_some_and(|c| c.is_uppercase() || c.is_ascii_digit() || "\u{2022}-*".contains(c)));
+        let is_heading = prev_ended && headingish(l) && next_starts_new;
+        match (&mut cur, is_heading) {
+            // Consecutive heading lines are one heading broken across lines.
+            (Some(Block::Heading(_, t)), true) => {
+                t.push(' ');
+                t.push_str(l);
+            }
+            (_, true) => {
+                flush(&mut cur, &mut blocks);
+                let level = if first_page && blocks.is_empty() { 1 } else { 2 };
+                cur = Some(Block::Heading(level, l.to_string()));
+            }
+            (Some(Block::Para(t)) | Some(Block::Item(t)), false) if !prev_ended => {
+                // Join, mending a word hyphenated across lines.
+                if t.ends_with('-') && l.chars().next().is_some_and(char::is_lowercase) {
+                    t.pop();
+                } else {
+                    t.push(' ');
+                }
+                t.push_str(l);
+            }
+            _ => {
+                flush(&mut cur, &mut blocks);
+                cur = Some(Block::Para(l.to_string()));
+            }
+        }
+        prev_ended = if is_heading { true } else { ends_sentence(l) };
+    }
+    flush(&mut cur, &mut blocks);
+    blocks
+}
+
 pub fn from_pdf(job: &Job) -> Result<Vec<PathBuf>, AppError> {
     match job.target {
         "png" | "jpg" => render_pages(job),
+        "docx" | "html" => {
+            let text = crate::pdf::extract(job.input)?;
+            let pages: Vec<Vec<Block>> = text.pages.iter().enumerate().map(|(i, p)| pdf_page_blocks(p, i == 0)).collect();
+            if pages.iter().all(Vec::is_empty) {
+                return Err(AppError::new("no_text", "This PDF has no text to put in a document. (Scanned pages are pictures; try PNG or JPG instead.)"));
+            }
+            let path = job.out(job.target);
+            let bytes = if job.target == "docx" {
+                super::docx::write(&pages, job.stem)?
+            } else {
+                // A rule marks where each PDF page ended.
+                let joined: Vec<Block> = pages.iter().enumerate().flat_map(|(i, p)| {
+                    let mut v = if i > 0 { vec![Block::Rule] } else { vec![] };
+                    v.extend(p.iter().cloned());
+                    v
+                }).collect();
+                html_page(job.stem, &blocks_to_html(&joined)).into_bytes()
+            };
+            std::fs::write(&path, bytes).map_err(fail)?;
+            Ok(vec![path])
+        }
         "txt" | "md" => {
             let text = crate::pdf::extract(job.input)?;
             let mut out = String::new();
@@ -450,7 +544,7 @@ pub fn docx_blocks(xml: &str) -> Result<Vec<Block>, AppError> {
         } else if style == "title" {
             Block::Heading(1, text)
         } else if is_list || style.contains("list") {
-            Block::Item(text)
+            Block::Item(text.trim_start_matches(['\u{2022}', '-', '*']).trim().to_string())
         } else {
             Block::Para(text)
         });
@@ -581,6 +675,7 @@ pub fn convert(job: &Job) -> Result<Vec<PathBuf>, AppError> {
     let out = job.out(job.target);
     let bytes = match job.target {
         "pdf" => pdfwrite::from_blocks(&blocks, job.stem).0,
+        "docx" => super::docx::write(&[blocks], job.stem)?,
         "html" => html_page(job.stem, &blocks_to_html(&blocks)).into_bytes(),
         "md" => blocks_to_markdown(&blocks).into_bytes(),
         _ => blocks_to_text(&blocks).into_bytes(),
@@ -592,6 +687,34 @@ pub fn convert(job: &Job) -> Result<Vec<PathBuf>, AppError> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn pdf_lines_become_paragraphs_headings_and_items() {
+        let page = "TCSS 999: Building Useful\n\nSoftware\n\nInstructor: Dr. Example. Office hours are in\n\nRoom 210.\n\nGrading\n\nGrading is labor-based. Each\n\nmissing artifact lowers the grade.\n\n\u{2022} Bring a note-\n\nbook to class.\n\n1. First step.\n\nThe end.";
+        assert_eq!(
+            pdf_page_blocks(page, true),
+            vec![
+                Block::Heading(1, "TCSS 999: Building Useful Software".into()),
+                Block::Para("Instructor: Dr. Example. Office hours are in Room 210.".into()),
+                Block::Heading(2, "Grading".into()),
+                Block::Para("Grading is labor-based. Each missing artifact lowers the grade.".into()),
+                Block::Item("Bring a notebook to class.".into()),
+                Block::Item("1. First step.".into()),
+                Block::Para("The end.".into()),
+            ]
+        );
+    }
+
+    #[test]
+    fn sample_pdf_becomes_a_word_file() {
+        let text = crate::pdf::extract(std::path::Path::new("../test-files/sample-syllabus.pdf")).unwrap();
+        let pages: Vec<Vec<Block>> = text.pages.iter().enumerate().map(|(i, p)| pdf_page_blocks(p, i == 0)).collect();
+        assert!(pages[0].contains(&Block::Heading(2, "Grading".into())), "{:?}", pages[0]);
+        assert!(pages[1].contains(&Block::Heading(2, "Policies".into())), "{:?}", pages[1]);
+        assert!(pages[0].iter().any(|b| matches!(b, Block::Para(t) if t.contains("October 11, 2026 at 11:59 PM."))), "{:?}", pages[0]);
+        let bytes = super::super::docx::write(&pages, "sample").unwrap();
+        assert!(bytes.starts_with(b"PK"));
+    }
 
     #[test]
     fn markdown_becomes_blocks() {

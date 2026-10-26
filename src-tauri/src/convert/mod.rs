@@ -14,6 +14,7 @@
 mod archive;
 mod data;
 mod docs;
+mod docx;
 mod media;
 mod office;
 mod pdfwrite;
@@ -299,21 +300,26 @@ pub fn routes(format: &str) -> Vec<(&'static str, &'static str, Option<&'static 
             r.push(("pdf", "PDF", None, "Document", decode, vec![Quality, Size]));
         }
         Family::Pdf => {
-            r.push(("png", "PNG", Some("one image per page"), "Image", Builtin, vec![Size]));
-            r.push(("jpg", "JPG", Some("one image per page"), "Image", Builtin, vec![Quality, Size]));
+            r.push(("docx", "Word", Some("editable text; layout not kept"), "Document", Builtin, vec![]));
+            r.push(("html", "HTML", Some("a web page of the text"), "Document", Builtin, vec![]));
             r.push(("txt", "Text", Some("the PDF's text"), "Document", Builtin, vec![]));
             r.push(("md", "Markdown", Some("the PDF's text"), "Document", Builtin, vec![]));
+            r.push(("png", "PNG", Some("one image per page"), "Image", Builtin, vec![Size]));
+            r.push(("jpg", "JPG", Some("one image per page"), "Image", Builtin, vec![Quality, Size]));
         }
         Family::Document => {
-            r.push(("pdf", "PDF", None, "Document", LibreOffice, vec![]));
+            // MyFile reads Word and ODT itself; the older .doc and RTF need LibreOffice.
+            let native = matches!(format, "docx" | "odt");
+            let e = if native { Builtin } else { LibreOffice };
+            r.push(("pdf", "PDF", native.then_some("text and headings"), "Document", e, vec![]));
             for (id, label) in [("docx", "Word"), ("odt", "ODT"), ("rtf", "RTF"), ("html", "HTML")] {
                 if id != format {
-                    r.push((id, label, None, "Document", LibreOffice, vec![]));
+                    let e = if native && matches!(id, "docx" | "html") { Builtin } else { LibreOffice };
+                    r.push((id, label, None, "Document", e, vec![]));
                 }
             }
-            let text_engine = if matches!(format, "docx" | "odt") { Builtin } else { LibreOffice };
-            r.push(("txt", "Text", None, "Document", text_engine, vec![]));
-            if text_engine == Builtin {
+            r.push(("txt", "Text", None, "Document", e, vec![]));
+            if native {
                 r.push(("md", "Markdown", None, "Document", Builtin, vec![]));
             }
             r.push(("epub", "EPUB", None, "Ebook", Pandoc, vec![]));
@@ -331,14 +337,17 @@ pub fn routes(format: &str) -> Vec<(&'static str, &'static str, Option<&'static 
             }
         }
         Family::Presentation => {
-            r.push(("pdf", "PDF", None, "Document", LibreOffice, vec![]));
+            let e = if format == "pptx" || format == "odp" { Builtin } else { LibreOffice };
+            r.push(("pdf", "PDF", (e == Builtin).then_some("the slides' text"), "Document", e, vec![]));
+            if e == Builtin {
+                r.push(("docx", "Word", Some("one section per slide"), "Document", Builtin, vec![]));
+            }
             if format != "pptx" {
                 r.push(("pptx", "PowerPoint", None, "Presentation", LibreOffice, vec![]));
             }
             if format != "odp" {
                 r.push(("odp", "ODP", None, "Presentation", LibreOffice, vec![]));
             }
-            let e = if format == "pptx" || format == "odp" { Builtin } else { LibreOffice };
             r.push(("txt", "Text", Some("the slides' text"), "Document", e, vec![]));
             if e == Builtin {
                 r.push(("md", "Markdown", Some("one section per slide"), "Document", Builtin, vec![]));
@@ -349,7 +358,7 @@ pub fn routes(format: &str) -> Vec<(&'static str, &'static str, Option<&'static 
             r.push(("md", "Markdown", None, "Document", Builtin, vec![]));
             r.push(("html", "HTML", None, "Document", Builtin, vec![]));
             r.push(("pdf", "PDF", None, "Document", Builtin, vec![]));
-            r.push(("docx", "Word", None, "Document", Pandoc, vec![]));
+            r.push(("docx", "Word", None, "Document", Builtin, vec![]));
         }
         Family::Text => {
             let all = [("pdf", "PDF"), ("html", "HTML"), ("txt", "Text"), ("md", "Markdown"), ("docx", "Word"), ("odt", "ODT"), ("epub", "EPUB"), ("rst", "reStructuredText"), ("tex", "LaTeX")];
@@ -361,7 +370,8 @@ pub fn routes(format: &str) -> Vec<(&'static str, &'static str, Option<&'static 
                     ("md" | "txt", "pdf" | "html") => Builtin,
                     ("html", "txt" | "pdf") => Builtin,
                     ("md", "txt") | ("txt", "md") => Builtin,
-                    (_, "docx" | "odt") if format == "html" || format == "txt" => LibreOffice,
+                    ("md" | "txt" | "html", "docx") => Builtin,
+                    ("html" | "txt", "odt") => LibreOffice,
                     _ => Pandoc,
                 };
                 r.push((id, label, None, "Document", e, vec![]));
