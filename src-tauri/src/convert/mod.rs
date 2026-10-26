@@ -303,7 +303,6 @@ pub fn routes(format: &str) -> Vec<(&'static str, &'static str, Option<&'static 
             r.push(("jpg", "JPG", Some("one image per page"), "Image", Builtin, vec![Quality, Size]));
             r.push(("txt", "Text", Some("the PDF's text"), "Document", Builtin, vec![]));
             r.push(("md", "Markdown", Some("the PDF's text"), "Document", Builtin, vec![]));
-            r.push(("docx", "Word", None, "Document", LibreOffice, vec![]));
         }
         Family::Document => {
             r.push(("pdf", "PDF", None, "Document", LibreOffice, vec![]));

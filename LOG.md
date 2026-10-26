@@ -37,6 +37,7 @@ Tool: Claude Code in VS Code (mostly Opus 5.5, sometimes Haiku)
 - I felt like the project looked like no effort went into it, even though a lot was built. So I had Claude make it look better: a browser version of the converter on my portfolio (it converts many files at once and has a before/after slider), a new project page with real screenshots, and a new demo video of the converter.
 - Testing the browser version caught that PDF and MP3 conversions stalled when the tab wasn't visible, so Claude fixed that.
 - I published a release on GitHub so people can download the app for Windows or Mac.
+- A PDF was still showing Word as an option, which doesn't make sense, so I had Claude remove it. A PDF now only converts to images (one per page) or its text.
 
 ## Issues
 
