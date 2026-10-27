@@ -265,6 +265,14 @@ mod tests {
     }
 
     #[test]
+    fn malformed_answers_are_rejected() {
+        for bad in [json!({"question":null,"imageOptions":null,"reason":"r"}), json!({"choice":5,"reason":"r"}), json!("ai-summarize"), json!(null)] {
+            let e = validate(FileKind::Pdf, reply(bad.clone())).unwrap_err();
+            assert_eq!(e.code, "route_invalid", "{bad}");
+        }
+    }
+
+    #[test]
     fn question_choice_needs_a_question() {
         let e = validate(FileKind::Text, reply(json!({"choice":"ai-question","question":"  ","imageOptions":null,"reason":"r"}))).unwrap_err();
         assert_eq!(e.code, "route_invalid");

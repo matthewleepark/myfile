@@ -1,4 +1,5 @@
-//! Evaluation harness for the AI document assistant.
+//! Evaluation harnesses: the AI document assistant (`eval_live`) and the
+//! conversion suggestions (`eval_conversion_live`, further down).
 //!
 //! Runs every case in `eval/cases.json` through the real pipeline (local
 //! extraction → Claude Code CLI → `ai::validate`) for each model, then
@@ -478,6 +479,258 @@ async fn eval_live() {
     std::fs::write(root.join("eval/results.json"), serde_json::to_string_pretty(&results).unwrap()).unwrap();
     std::fs::write(root.join("eval/RESULTS.md"), report(&cases, &results, &labels)).unwrap();
     println!("\nWrote eval/RESULTS.md and eval/results.json");
+}
+
+// ---------------------------------------------------------------------------
+// Conversion suggestions ("describe it"): the AI's pick and MyFile's decision
+// ---------------------------------------------------------------------------
+//
+// Each case in eval/conversion-cases.json sends a request about a real file
+// through the same prompt, schema and `check_suggestion` as the app, records
+// what the model picked and what MyFile accepted, and, for cases marked
+// `run`, converts the file with the accepted pick and checks that the output
+// really is that format. Run with:
+//   cargo test eval_conversion_live -- --ignored --nocapture
+// Models default to "haiku"; add a local model with EVAL_MODELS=haiku,local:qwen2.5:3b.
+
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct ConversionCase {
+    id: String,
+    /// normal, unsupported, adversarial-request or adversarial-document.
+    category: String,
+    about: String,
+    file: String,
+    request: String,
+    /// Acceptable outcomes: conversion ids, or "none" when nothing should be picked.
+    accept: Vec<String>,
+    /// Convert with the accepted pick and check the output's format.
+    #[serde(default)]
+    run: bool,
+    /// Only meaningful while this tool is missing (e.g. "LibreOffice"); skipped otherwise.
+    #[serde(default)]
+    needs_missing: Option<String>,
+}
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+struct ConversionOutcome {
+    id: String,
+    category: String,
+    model: String,
+    request: String,
+    expected: Vec<String>,
+    /// The target the model's raw answer named.
+    ai_pick: Option<String>,
+    /// What MyFile did with it: a conversion id, "none", or "rejected (<code>)".
+    accepted: String,
+    /// The prompt held no file name or file text.
+    prompt_clean: bool,
+    /// For `run` cases: the format the output was detected as.
+    output_check: Option<String>,
+    pass: bool,
+    error: Option<String>,
+    duration_ms: u64,
+}
+
+impl Provider {
+    async fn run_with(&self, system: &str, schema: &str, prompt: String) -> Result<ai::RawReply, crate::error::AppError> {
+        let (_keep_open, cancel) = oneshot::channel();
+        match self {
+            Provider::Claude(c) => c.run_with(system, schema, prompt, cancel).await,
+            Provider::Local(l) => l.run_with(system, schema, prompt, cancel).await,
+        }
+    }
+}
+
+async fn run_conversion_case(root: &Path, case: &ConversionCase, provider: &Provider, tools: &crate::convert::Tools) -> ConversionOutcome {
+    use crate::convert::{check_suggestion, detect, suggestion_prompt, targets, ROUTE_PROMPT, ROUTE_SCHEMA};
+    let mut out = ConversionOutcome {
+        id: case.id.clone(),
+        category: case.category.clone(),
+        model: provider.label(),
+        request: case.request.clone(),
+        expected: case.accept.clone(),
+        ai_pick: None,
+        accepted: String::new(),
+        prompt_clean: false,
+        output_check: None,
+        pass: false,
+        error: None,
+        duration_ms: 0,
+    };
+    let path = root.join(&case.file);
+    let Some(format) = detect(&path) else {
+        out.error = Some("unknown format".into());
+        return out;
+    };
+    let list = targets(format, tools);
+    let size = std::fs::metadata(&path).map(|m| m.len()).unwrap_or(0);
+    let prompt = suggestion_prompt(format, size, &list, &case.request);
+    // The prompt must hold neither the file's name nor any of its text.
+    let stem = path.file_stem().map(|s| s.to_string_lossy().into_owned()).unwrap_or_default();
+    let text = files::inspect(&path).ok().and_then(|i| crate::load_document(&path, i.kind).ok()).map(|d| d.pages.join(" ")).unwrap_or_default();
+    let snippets: Vec<String> = text.split(['.', '\n']).map(str::trim).filter(|s| s.len() > 20).map(String::from).collect();
+    out.prompt_clean = !prompt.contains(&stem) && snippets.iter().all(|s| !prompt.contains(s.as_str()));
+
+    let started = Instant::now();
+    let reply = provider.run_with(ROUTE_PROMPT, ROUTE_SCHEMA, prompt).await;
+    out.duration_ms = started.elapsed().as_millis() as u64;
+    let reply = match reply {
+        Ok(r) => r,
+        Err(e) => {
+            out.error = Some(e.message);
+            return out;
+        }
+    };
+    out.ai_pick = reply.json["target"].as_str().map(String::from);
+    let suggestion = check_suggestion(&reply.json, &list).map(|s| serde_json::to_value(s).unwrap_or_default());
+    let (picked, settings) = match &suggestion {
+        Ok(v) => (v["target"].as_str().map(String::from), v.clone()),
+        Err(e) => {
+            out.accepted = format!("rejected ({})", e.code);
+            (None, serde_json::Value::Null)
+        }
+    };
+    if suggestion.is_ok() {
+        out.accepted = picked.clone().unwrap_or_else(|| "none".into());
+    }
+    // A rejected answer picks nothing, which is the safe outcome "none" stands for.
+    let outcome = picked.clone().unwrap_or_else(|| "none".into());
+    out.pass = out.prompt_clean && case.accept.contains(&outcome);
+
+    if out.pass && case.run && let Some(target) = picked {
+        let dir = tempfile::tempdir().unwrap();
+        let s = crate::convert::Settings {
+            quality: settings["quality"].as_u64().map(|q| q as u8),
+            max_dimension: settings["maxDimension"].as_u64().map(|d| d as u32),
+            bitrate: settings["bitrate"].as_u64().map(|b| b as u32),
+        };
+        let cancel = std::sync::atomic::AtomicBool::new(false);
+        let progress = |_: Option<f64>| {};
+        let job = crate::convert::Job { input: &path, format, target: &target, settings: &s, out_dir: dir.path(), stem: "out", tools, cancel: &cancel, progress: &progress };
+        match crate::convert::run(&job) {
+            Ok(files) => {
+                let got = files.first().and_then(|f| detect(&dir.path().join(f))).unwrap_or("unknown");
+                out.output_check = Some(format!("{} file(s), first detected as {got}", files.len()));
+                out.pass = got == target;
+            }
+            Err(e) => {
+                out.output_check = Some(format!("conversion failed: {}", e.message));
+                out.pass = false;
+            }
+        }
+    }
+    out
+}
+
+fn conversion_report(cases: &[ConversionCase], results: &[ConversionOutcome], models: &[String], skipped: &[String]) -> String {
+    let mut md = String::from(
+        "# MyFile conversion-suggestion evaluation\n\n\
+         Live model calls (not mocked). Each case sends a request about a real file through the app's own prompt, \
+         schema and `check_suggestion`. **AI pick** is what the model answered; **MyFile accepted** is what the app \
+         did with it (an id, `none`, or `rejected` for a malformed answer). For cases marked *run*, the file was then \
+         converted with the accepted pick and the output's format was detected from its contents. Every prompt was \
+         also checked to contain neither the file's name nor its text.\n\n\
+         Generated by `cargo test eval_conversion_live -- --ignored --nocapture`. Automated unit tests for the same \
+         rules (malformed answers, unknown ids, unsupported targets) are listed in [TESTS.md](TESTS.md).\n\n## Summary\n\n\
+         | Model | Passed | Normal | Unsupported | Adversarial requests | Adversarial documents | Prompts clean | Outputs verified |\n|---|---|---|---|---|---|---|---|\n",
+    );
+    for m in models {
+        let rs: Vec<&ConversionOutcome> = results.iter().filter(|r| &r.model == m).collect();
+        let cat = |c: &str| {
+            let v: Vec<_> = rs.iter().filter(|r| r.category == c).collect();
+            format!("{}/{}", v.iter().filter(|r| r.pass).count(), v.len())
+        };
+        let ran: Vec<_> = rs.iter().filter(|r| r.output_check.is_some()).collect();
+        let _ = writeln!(
+            md,
+            "| {m} | {}/{} | {} | {} | {} | {} | {}/{} | {}/{} |",
+            rs.iter().filter(|r| r.pass).count(),
+            rs.len(),
+            cat("normal"),
+            cat("unsupported"),
+            cat("adversarial-request"),
+            cat("adversarial-document"),
+            rs.iter().filter(|r| r.prompt_clean).count(),
+            rs.len(),
+            ran.iter().filter(|r| r.pass).count(),
+            ran.len()
+        );
+    }
+    md.push_str("\n## Cases\n\n| Case | Purpose | File | Request | Expected | Model | AI pick | MyFile accepted | Output | Result |\n|---|---|---|---|---|---|---|---|---|---|\n");
+    for r in results {
+        let c = cases.iter().find(|c| c.id == r.id);
+        let _ = writeln!(
+            md,
+            "| {} | {} | `{}` | {} | {} | {} | {} | {} | {} | {} |",
+            r.id,
+            c.map(|c| c.about.as_str()).unwrap_or(""),
+            c.map(|c| c.file.as_str()).unwrap_or(""),
+            r.request.replace('|', "\\|"),
+            r.expected.join(" or "),
+            r.model,
+            r.ai_pick.as_deref().unwrap_or("–"),
+            r.accepted,
+            r.output_check.as_deref().unwrap_or("–"),
+            if r.pass { "✅ pass".to_string() } else { format!("❌ fail{}", r.error.as_ref().map(|e| format!(" ({e})")).unwrap_or_default()) }
+        );
+    }
+    if !skipped.is_empty() {
+        let _ = writeln!(md, "\nSkipped on this machine: {}.", skipped.join("; "));
+    }
+    md
+}
+
+#[tokio::test]
+#[ignore]
+async fn eval_conversion_live() {
+    let root = Path::new(env!("CARGO_MANIFEST_DIR")).join("..");
+    let cases: Vec<ConversionCase> = serde_json::from_str(&std::fs::read_to_string(root.join("eval/conversion-cases.json")).unwrap()).unwrap();
+    let models: Vec<String> =
+        std::env::var("EVAL_MODELS").unwrap_or_else(|_| "haiku".into()).split(',').map(|m| m.trim().to_string()).filter(|m| !m.is_empty()).collect();
+    let home = std::env::var_os("USERPROFILE").or_else(|| std::env::var_os("HOME")).map(PathBuf::from);
+    let found = ClaudeCli::locate(home.as_deref());
+    let tools = crate::convert::Tools::find();
+    let missing = |tool: &str| match tool {
+        "LibreOffice" => tools.soffice.is_none(),
+        "pandoc" => tools.pandoc.is_none(),
+        "ffmpeg" => tools.ffmpeg.is_none(),
+        _ => true,
+    };
+    let mut results = Vec::new();
+    let mut labels = Vec::new();
+    let mut skipped = Vec::new();
+    for model in &models {
+        let provider = match model.strip_prefix("local:") {
+            Some(m) => Provider::Local(crate::local::OllamaClient { model: m.to_string() }),
+            None => Provider::Claude(ClaudeCli { binary: found.as_ref().expect("Claude Code CLI not found").binary.clone(), model: model.clone() }),
+        };
+        labels.push(provider.label());
+        for case in &cases {
+            if let Some(t) = case.needs_missing.as_deref().filter(|t| !missing(t)) {
+                let note = format!("{} ({t} is installed)", case.id);
+                if !skipped.contains(&note) {
+                    skipped.push(note);
+                }
+                continue;
+            }
+            let r = run_conversion_case(&root, case, &provider, &tools).await;
+            println!(
+                "{:<20} {:<26} {} pick={:?} accepted={} {}",
+                r.model,
+                r.id,
+                if r.pass { "PASS" } else { "FAIL" },
+                r.ai_pick,
+                r.accepted,
+                r.error.clone().or(r.output_check.clone()).unwrap_or_default()
+            );
+            results.push(r);
+        }
+    }
+    std::fs::write(root.join("eval/conversion-results.json"), serde_json::to_string_pretty(&results).unwrap()).unwrap();
+    std::fs::write(root.join("eval/CONVERSION-RESULTS.md"), conversion_report(&cases, &results, &labels, &skipped)).unwrap();
+    println!("\nWrote eval/CONVERSION-RESULTS.md and eval/conversion-results.json");
 }
 
 #[cfg(test)]
